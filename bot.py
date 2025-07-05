@@ -1,11 +1,16 @@
 import time
 import telegram
 from facebook_scraper import get_posts
+import os
+from dotenv import load_dotenv
+
+# Загружаем переменные окружения из файла .env
+load_dotenv()
 
 # --- НАСТРОЙКИ ---
-FACEBOOK_USER_URL = 'sergej.dacuk'  # Имя пользователя или ID страницы Facebook
-TELEGRAM_BOT_TOKEN = '7679370618:AAHDQkDEIzj2_jcEcDUgc93sctX7S79GY8k'
-TELEGRAM_CHAT_ID = '993849549'
+FACEBOOK_USER_URL = os.getenv('FACEBOOK_USER_URL')
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 CHECK_INTERVAL_SECONDS = 3600  # Интервал проверки в секундах (3600 = 1 час)
 # -----------------
 
@@ -42,6 +47,10 @@ def set_last_post_id(post_id):
 
 def main():
     """Основная функция мониторинга."""
+    if not all([FACEBOOK_USER_URL, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID]):
+        print("Ошибка: Отсутствуют необходимые переменные окружения. Убедитесь, что .env файл настроен корректно.")
+        return
+
     bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
     last_post_id = get_last_post_id()
 
@@ -52,8 +61,6 @@ def main():
             print(f"Проверка новых постов для пользователя: {FACEBOOK_USER_URL}")
             
             # Получаем посты, используя итератор
-            # Увеличиваем количество страниц для поиска, чтобы быть уверенным, что мы получим последний пост.
-            # Предупреждение "A low page limit (<=2) might return no results" говорит о том, что нужно увеличить.
             posts_iterator = get_posts(FACEBOOK_USER_URL, pages=5, cookies="cookies.txt")
             
             latest_post = None
@@ -62,15 +69,14 @@ def main():
                 latest_post = next(posts_iterator)
             except StopIteration:
                 print("Не удалось получить посты. Возможно, нужно обновить cookies или Facebook изменил верстку.")
-                time.sleep(CHECK_INTERVAL_SECONDS) # Пауза перед следующей попыткой
-                continue # Переход к следующей итерации цикла
+                time.sleep(CHECK_INTERVAL_SECONDS)
+                continue
 
             if latest_post:
                 latest_post_id = latest_post['post_id']
 
                 if latest_post_id != last_post_id:
                     print(f"Найден новый пост! ID: {latest_post_id}")
-                    # Проверяем наличие ссылки в тексте или в прикрепленной ссылке
                     if latest_post['link'] or ('http' in (latest_post['text'] or '')):
                         send_telegram_notification(bot, latest_post)
                     else:
@@ -85,7 +91,6 @@ def main():
 
         except Exception as e:
             print(f"Произошла ошибка: {e}")
-            # В случае ошибки делаем более длительную паузу
             time.sleep(CHECK_INTERVAL_SECONDS * 2)
 
         print(f"Следующая проверка через {CHECK_INTERVAL_SECONDS / 60} минут.")
